@@ -1,0 +1,34 @@
+name: web-tic-tac-toe
+
+services:
+  db:
+    image: postgres:latest
+    container_name: WebTicTacToe_db
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=userpass
+      - POSTGRES_DB=TicTacToeDB
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d TicTacToeDB"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+  
+  service:
+    build: 
+      context: ..
+      dockerfile: src/Dockerfile
+    env_file:
+      - ../config/service.env
+    ports:
+      - "80:80"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

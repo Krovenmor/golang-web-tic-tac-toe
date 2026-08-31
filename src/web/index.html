@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Крестики-Нолики: Solo & Pair</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            min-height: 100vh; 
+            margin: 0; 
+            background: #f0f2f5; 
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            width: 420px;
+            text-align: center;
+        }
+        .form-group {
+            margin-bottom: 15px;
+            text-align: left;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #4a5568;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            box-sizing: border-box;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+            margin-bottom: 8px;
+        }
+        button:hover { background-color: #0056b3; }
+        .switch-auth {
+            margin-top: 15px;
+            font-size: 14px;
+            color: #64748b;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        .hidden { display: none !important; }
+        
+        /* ИГРОВОЕ ПОЛЕ */
+        .board { 
+            display: grid; 
+            grid-template-columns: repeat(3, 100px); 
+            grid-template-rows: repeat(3, 100px); 
+            gap: 5px; 
+            margin: 20px auto; 
+            width: 310px;
+        }
+        .cell { 
+            width: 100px; 
+            height: 100px; 
+            background: white; 
+            border: 2px solid #ccc; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-size: 36px; 
+            font-weight: bold; 
+            cursor: pointer; 
+            box-sizing: border-box;
+        }
+        .cell:hover { background: #eef; }
+        .cell.disabled { cursor: not-allowed; background: #fafafa; }
+        #status { font-size: 16px; font-weight: bold; margin-bottom: 15px; min-height: 22px; }
+        
+        /* МАТЧАП ИГРОКОВ */
+        .matchup {
+            font-size: 15px;
+            background: #e2e8f0;
+            padding: 8px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-weight: 500;
+            color: #334155;
+        }
+        
+        /* СПИСОК ИГР И ИСТОРИЯ */
+        .game-list {
+            text-align: left;
+            max-height: 150px;
+            overflow-y: auto;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            padding: 8px;
+            margin-bottom: 15px;
+        }
+        .game-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 14px;
+        }
+        .game-item button {
+            width: auto;
+            padding: 4px 10px;
+            font-size: 13px;
+            margin: 0;
+        }
+        .btn-logout { background-color: #6c757d; }
+        .btn-logout:hover { background-color: #5a6268; }
+        .btn-restart { background-color: #28a745; }
+        .btn-restart:hover { background-color: #218838; }
+
+        /* НАСТРОЙКИ ТАБЛИЦЫ ЛИДЕРОВ */
+        .leaderboard-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+            align-items: center;
+        }
+        .leaderboard-controls input {
+            width: 70px;
+            padding: 6px;
+        }
+        .leaderboard-controls button {
+            margin: 0;
+            padding: 8px;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="auth-zone">
+        <h2 id="auth-title">Вход в игру</h2>
+        <div class="form-group"><label>Логин</label><input type="text" id="username"></div>
+        <div class="form-group"><label>Пароль</label><input type="password" id="password"></div>
+        <button id="auth-btn" onclick="handleAuth()">Войти</button>
+        <div id="auth-switch" class="switch-auth" onclick="toggleAuthMode()">Нет аккаунта? Зарегистрироваться</div>
+    </div>
+
+    <div id="lobby-zone" class="hidden">
+        <h2>Привет, <span id="player-display-name">...</span></h2>
+        <button onclick="startSoloGame()">Играть против Компьютера</button>
+        <hr style="margin: 20px 0; border: 0; border-top: 1px solid #ccc;">
+        
+        <h3>Доступные парные игры</h3>
+        <button onclick="refreshPairGames()">Обновить список игр</button>
+        <div class="game-list" id="pair-games-container">Загрузка лобби...</div>
+        <button onclick="createPairGame()" style="background-color: #28a745;">Создать новую парную игру</button>
+        
+        <hr style="margin: 20px 0; border: 0; border-top: 1px solid #ccc;">
+        
+        <h3>История ваших игр</h3>
+        <button onclick="loadPlayerHistory()">Обновить историю</button>
+        <div class="game-list" id="history-games-container">Загрузка истории...</div>
+
+        <hr style="margin: 20px 0; border: 0; border-top: 1px solid #ccc;">
+
+        <h3>Таблица лидеров</h3>
+        <div class="leaderboard-controls">
+            <label for="leaderboard-limit" style="font-size: 13px; margin: 0;">Лимит:</label>
+            <input type="number" id="leaderboard-limit" value="10" min="1">
+            <button onclick="loadLeaderboard()">Показать</button>
+        </div>
+        <div class="game-list" id="leaderboard-container">Загрузка топа...</div>
+        
+        <button class="btn-logout" onclick="logout()">Выйти</button>
+    </div>
+
+    <div id="game-zone" class="hidden">
+        <h2 id="game-mode-title">Игра</h2>
+        <div id="matchup-info" class="matchup hidden">Загрузка игроков...</div>
+        <div id="status">Инициализация...</div>
+        <div class="board" id="board"></div>
+        <button id="restart-btn" class="btn-restart hidden" onclick="startSoloGame()">Начать заново</button>
+        <button id="action-btn" onclick="leaveGame()">Выйти в лобби</button>
+    </div>
+</div>
+
+<script>
+    let isLoginMode = true;
+    
+    // Ключи для localStorage
+    const ACCESS_KEY = "tic_access_token";
+    const REFRESH_KEY = "tic_refresh_token";
+    const USER_UUID_KEY = "tic_user_uuid";
+    const USER_NAME_KEY = "tic_user_name";
+
+    let currentGameUUID = "";
+    let gameType = ""; 
+    let matrix = [[0,0,0],[0,0,0],[0,0,0]];
+    let gameStatus = 0; 
+    let pollInterval = null;
+
+    const SoloStatus = { PROGRESS: 0, COMP_WIN: 1, PLYR_WIN: 2, DRAW: 3 };
+    const PairStatus = { WAIT: 0, F_MOVE: 1, S_MOVE: 2, DRAW: 3, F_WIN: 4, S_WIN: 5 };
+
+    let role = ""; 
+    let opponentName = "";
+
+    // АВТОМАТИЧЕСКИЙ ВХОД
+    window.addEventListener('DOMContentLoaded', async () => {
+        const rToken = localStorage.getItem(REFRESH_KEY);
+        if (!rToken) return;
+
+        try {
+            const res = await fetch('/api/jwt/update/refresh', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refreshToken: rToken })
+            });
+
+            if (!res.ok) throw new Error("Сессия истекла");
+
+            const data = await res.json();
+            
+            localStorage.setItem(ACCESS_KEY, data.accessToken);
+            localStorage.setItem(REFRESH_KEY, data.refreshToken);
+            
+            document.getElementById('auth-zone').classList.add('hidden');
+            document.getElementById('lobby-zone').classList.remove('hidden');
+            document.getElementById('player-display-name').innerText = localStorage.getItem(USER_NAME_KEY) || "...";
+            
+            await fetchPlayerName();
+            refreshPairGames();
+            loadPlayerHistory();
+            loadLeaderboard();
+
+        } catch (err) {
+            console.log("Авто-вход не удался, токен невалиден:", err.message);
+            logout();
+        }
+    });
+
+    /**
+     * Защищенная обертка над fetch
+     */
+    async function fetchWithAuth(url, options = {}) {
+        options.headers = options.headers || {};
+        const accessToken = localStorage.getItem(ACCESS_KEY);
+        if (accessToken) {
+            options.headers["Authorization"] = `Bearer ${accessToken}`;
+        }
+
+        let response = await fetch(url, options);
+
+        if (response.status === 401) {
+            const refreshToken = localStorage.getItem(REFRESH_KEY);
+            if (!refreshToken) {
+                logout();
+                return response;
+            }
+
+            try {
+                const refreshResponse = await fetch('/api/jwt/update/access', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ refreshToken: refreshToken })
+                });
+
+                if (!refreshResponse.ok) {
+                    logout();
+                    return response;
+                }
+
+                const data = await refreshResponse.json();
+                localStorage.setItem(ACCESS_KEY, data.accessToken);
+                localStorage.setItem(REFRESH_KEY, data.refreshToken);
+
+                options.headers["Authorization"] = `Bearer ${data.accessToken}`;
+                response = await fetch(url, options);
+            } catch (err) {
+                logout();
+                return response;
+            }
+        }
+        return response;
+    }
+
+    function toggleAuthMode() {
+        isLoginMode = !isLoginMode;
+        document.getElementById('auth-title').innerText = isLoginMode ? "Вход в игру" : "Регистрация";
+        document.getElementById('auth-btn').innerText = isLoginMode ? "Войти" : "Зарегистрироваться";
+        document.getElementById('auth-switch').innerText = isLoginMode ? "Нет аккаунта? Зарегистрироваться" : "Уже есть аккаунт? Войти";
+    }
+
+    async function handleAuth() {
+        const login = document.getElementById('username').value.trim();
+        const pass = document.getElementById('password').value.trim();
+        if(!login || !pass) return alert("Заполните поля!");
+
+        try {
+            if (isLoginMode) {
+                const res = await fetch('/api/auth/login', { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ login: login, password: pass })
+                });
+                if (!res.ok) throw new Error("Ошибка авторизации. Проверьте данные.");
+                
+                const data = await res.json();
+                localStorage.setItem(ACCESS_KEY, data.accessToken);
+                localStorage.setItem(REFRESH_KEY, data.refreshToken);
+                
+                const userUUID = data.refreshToken.split(":")[0];
+                localStorage.setItem(USER_UUID_KEY, userUUID);
+                
+                await fetchPlayerName();
+
+                document.getElementById('auth-zone').classList.add('hidden');
+                document.getElementById('lobby-zone').classList.remove('hidden');
+                refreshPairGames();
+                loadPlayerHistory();
+                loadLeaderboard();
+            } else {
+                const res = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ login: login, password: pass })
+                });
+                if (!res.ok) throw new Error("Ошибка регистрации. Логин занят или слишком короткий.");
+                alert("Успешно! Теперь войдите.");
+                toggleAuthMode();
+            }
+        } catch (err) { alert(err.message); }
+    }
+
+    async function getAnyPlayerName(playerUUID) {
+        if (!playerUUID || playerUUID === "00000000-0000-0000-0000-000000000000") return "Ожидание...";
+        try {
+            const res = await fetchWithAuth(`/api/game/player/${playerUUID}/info`, { method: 'GET' });
+            if(res.ok) {
+                const data = await res.json();
+                return data.playername;
+            }
+        } catch(e) { }
+        return playerUUID.substring(0, 8) + "...";
+    }
+
+    async function fetchPlayerName() {
+        const myUUID = localStorage.getItem(USER_UUID_KEY);
+        const name = await getAnyPlayerName(myUUID);
+        localStorage.setItem(USER_NAME_KEY, name);
+        document.getElementById('player-display-name').innerText = name;
+    }
+
+    function logout() {
+        localStorage.clear();
+        stopPolling();
+        document.getElementById('username').value = "";
+        document.getElementById('password').value = "";
+        document.getElementById('player-display-name').innerText = "...";
+        document.getElementById('auth-zone').classList.remove('hidden');
+        document.getElementById('lobby-zone').classList.add('hidden');
+        document.getElementById('game-zone').classList.add('hidden');
+    }
+
+    /* --- ЛОГИКА ТАБЛИЦЫ ЛИДЕРОВ (С ЛОГИНАМИ С БЭКА) --- */
+    async function loadLeaderboard() {
+        const container = document.getElementById('leaderboard-container');
+        let limit = document.getElementById('leaderboard-limit').value || 10;
+        
+        container.innerText = "Загрузка топ-игроков...";
+
+        try {
+            const res = await fetchWithAuth(`/api/game/leaderboard?limit=${limit}`, { method: 'GET' });
+            if (!res.ok) throw new Error("Не удалось загрузить топ");
+            
+            const leaders = await res.json();
+            container.innerHTML = "";
+
+            if (!leaders || leaders.length === 0) {
+                container.innerText = "Таблица лидеров пуста";
+                return;
+            }
+
+            let index = 1;
+            leaders.forEach(user => {
+                const div = document.createElement('div');
+                div.className = "game-item";
+                
+                // Проверяем, текущий ли это игрок, по UUID
+                const isMe = user.uuid === localStorage.getItem(USER_UUID_KEY);
+                const displayName = isMe ? `<b>${user.login} (Вы)</b>` : user.login;
+
+                div.innerHTML = `
+                    <span>#${index++} ${displayName}</span>
+                    <span style="color: #28a745; font-weight: bold;">Ratio: ${user.w_ratio}</span>
+                `;
+                container.appendChild(div);
+            });
+        } catch (e) {
+            container.innerText = "Ошибка загрузки таблицы лидеров";
+        }
+    }
+
+    /* --- ЛОГИКА ЗАГРУЗКИ ИСТОРИИ ИГР --- */
+    async function loadPlayerHistory() {
+        const container = document.getElementById('history-games-container');
+        const playerUUID = localStorage.getItem(USER_UUID_KEY);
+        if (!playerUUID) return;
+        
+        container.innerText = "Загрузка истории...";
+
+        try {
+            const res = await fetchWithAuth(`/api/game/player/${playerUUID}/games`, { method: 'GET' });
+            if (!res.ok) throw new Error("Не удалось загрузить историю");
+            
+            const games = await res.json();
+            container.innerHTML = "";
+
+            if (!games || games.length === 0) {
+                container.innerText = "Вы еще не сыграли ни одной игры";
+                return;
+            }
+
+            games.forEach(game => {
+                const div = document.createElement('div');
+                div.className = "game-item";
+                const date = new String(game.datecreated).replace('T', ' ').substring(0, 16);
+                
+                let resultText = "Окончена";
+                if (game.winneruuid === playerUUID) {
+                    resultText = "🏆 Победа";
+                } else if (game.winneruuid && game.winneruuid !== "00000000-0000-0000-0000-000000000000") {
+                    resultText = "💀 Поражение";
+                } else if (Number(game.state) === 3) {
+                    resultText = "🤝 Ничья";
+                } else {
+                    resultText = "⏳ В процессе";
+                }
+
+                div.innerHTML = `<span>📅 ${date}</span><span style="font-weight: bold;">${resultText}</span>`;
+                container.appendChild(div);
+            });
+        } catch (e) {
+            container.innerText = "Ошибка загрузки истории";
+        }
+    }
+
+    /* --- ЛОГИКА СОЛО ИГРЫ --- */
+    async function startSoloGame() {
+        gameType = "solo";
+        document.getElementById('game-mode-title').innerText = "Одиночная игра против Компьютера";
+        document.getElementById('restart-btn').classList.add('hidden'); 
+        
+        const matchupEl = document.getElementById('matchup-info');
+        matchupEl.classList.remove('hidden');
+        matchupEl.innerText = `${localStorage.getItem(USER_NAME_KEY)} (X) vs 🤖 Компьютер (O)`;
+
+        try {
+            const res = await fetchWithAuth('/api/game/create/solo', { method: 'POST' });
+            const data = await res.json();
+            currentGameUUID = data.gameuuid;
+            matrix = data.gamefield.field;
+            gameStatus = Number(data.state);
+            
+            document.getElementById('lobby-zone').classList.add('hidden');
+            document.getElementById('game-zone').classList.remove('hidden');
+            
+            parseSoloStatus();
+            renderBoard();
+        } catch (err) { alert("Не удалось начать соло-игру"); }
+    }
+
+    function parseSoloStatus() {
+        const el = document.getElementById('status');
+        const restartBtn = document.getElementById('restart-btn');
+        
+        if (gameStatus === SoloStatus.PROGRESS) {
+            el.innerText = "Игра идет. Твой ход (X)";
+            restartBtn.classList.add('hidden');
+        } else {
+            restartBtn.classList.remove('hidden');
+            if (gameStatus === SoloStatus.COMP_WIN) el.innerText = "🤖 Компьютер победил (O)";
+            else if (gameStatus === SoloStatus.PLYR_WIN) el.innerText = "🎉 Ты победил! Красавчик!";
+            else if (gameStatus === SoloStatus.DRAW) el.innerText = "🤝 Ничья!";
+            
+            loadPlayerHistory();
+            loadLeaderboard();
+        }
+    }
+
+    /* --- ЛОГИКА ПАРНОЙ ИГРЫ --- */
+    async function refreshPairGames() {
+        const container = document.getElementById('pair-games-container');
+        container.innerText = "Обновление списка лобби...";
+        try {
+            const res = await fetchWithAuth('/api/game/pair', { method: 'GET' });
+            const data = await res.json();
+            container.innerHTML = "";
+            
+            if(!data.games || data.games.length === 0) {
+                container.innerText = "Нет доступных лобби";
+                return;
+            }
+
+            for (const gUUID of data.games) {
+                try {
+                    const infoRes = await fetchWithAuth(`/api/game/${gUUID}/fullinfo`, { method: 'GET' });
+                    if (infoRes.ok) {
+                        const infoData = await infoRes.json();
+                        const creatorName = await getAnyPlayerName(infoData.fPlayerUuid);
+                        
+                        const div = document.createElement('div');
+                        div.className = "game-item";
+                        div.innerHTML = `<span>🎮 Создатель: <b>${creatorName}</b></span> 
+                                         <button onclick="joinPairGame('${gUUID}')">Войти</button>`;
+                        container.appendChild(div);
+                    }
+                } catch (e) { console.error("Ошибка получения fullinfo для лобби", gUUID, e); }
+            }
+            if (container.innerHTML === "") {
+                container.innerText = "Нет доступных лобби";
+            }
+        } catch (e) { container.innerText = "Ошибка загрузки списка игр"; }
+    }
+
+    async function updatePairMatchupInfo() {
+        try {
+            const res = await fetchWithAuth(`/api/game/${currentGameUUID}/fullinfo`, { method: 'GET' });
+            if (res.ok) {
+                const data = await res.json();
+                const p1Name = await getAnyPlayerName(data.fPlayerUuid);
+                const p2Name = await getAnyPlayerName(data.sPlayerUuid);
+                
+                const matchupEl = document.getElementById('matchup-info');
+                matchupEl.classList.remove('hidden');
+                matchupEl.innerHTML = `❌ <b>${p1Name}</b> &nbsp;vs&nbsp; ⭕ <b>${p2Name}</b>`;
+            }
+        } catch (e) { console.error("Не удалось обновить информацию матча", e); }
+    }
+
+    async function createPairGame() {
+        gameType = "pair";
+        role = "first"; 
+        document.getElementById('game-mode-title').innerText = "Парная PvP игра";
+        document.getElementById('restart-btn').classList.add('hidden');
+        document.getElementById('matchup-info').innerText = "Ожидание оппонента...";
+        document.getElementById('matchup-info').classList.remove('hidden');
+
+        try {
+            const res = await fetchWithAuth('/api/game/create/pair', { method: 'POST' });
+            const data = await res.json();
+            currentGameUUID = data.gameuuid;
+            matrix = data.gamefield.field;
+            gameStatus = Number(data.state);
+
+            document.getElementById('lobby-zone').classList.add('hidden');
+            document.getElementById('game-zone').classList.remove('hidden');
+            
+            await updatePairMatchupInfo();
+            parsePairStatus();
+            renderBoard();
+            startPolling(); 
+        } catch (e) { alert("Не удалось создать лобби"); }
+    }
+
+    async function joinPairGame(gUUID) {
+        gameType = "pair";
+        document.getElementById('game-mode-title').innerText = "Парная PvP игра";
+        document.getElementById('restart-btn').classList.add('hidden');
+        document.getElementById('matchup-info').innerText = "Подключение...";
+        document.getElementById('matchup-info').classList.remove('hidden');
+
+        try {
+            let infoData = null;
+            const myUUID = localStorage.getItem(USER_UUID_KEY);
+
+            // 1. Пробуем стандартно войти
+            const res = await fetchWithAuth(`/api/game/${gUUID}/join`, { method: 'POST' });
+            
+            if (!res.ok) {
+                console.log("Обычный Join не прошёл (400), запрашиваем fullinfo для реконнекта...");
+                // 2. Если уже внутри — берем fullinfo один раз
+                const infoRes = await fetchWithAuth(`/api/game/${gUUID}/fullinfo`, { method: 'GET' });
+                if (!infoRes.ok) throw new Error("Не удалось получить данные о матче");
+
+                infoData = await infoRes.json();
+
+                if (infoData.fPlayerUuid === myUUID) {
+                    role = "first";
+                } else if (infoData.sPlayerUuid === myUUID) {
+                    role = "second";
+                } else {
+                    throw new Error("Лобби уже заполнено чужими игроками");
+                }
+                currentGameUUID = gUUID;
+            } else {
+                // Обычный успешный join (зашли вторым игроком)
+                const data = await res.json();
+                currentGameUUID = data.gameuuid;
+                role = "second"; 
+            }
+
+            // Переключаем экраны
+            document.getElementById('lobby-zone').classList.add('hidden');
+            document.getElementById('game-zone').classList.remove('hidden');
+
+            // 3. Запрашиваем состояние доски (shortinfo) — тоже ровно ОДИН раз
+            const shortRes = await fetchWithAuth(`/api/game/${currentGameUUID}/shortinfo`, { method: 'GET' });
+            if (!shortRes.ok) throw new Error("Не удалось загрузить состояние поля");
+            
+            const shortData = await shortRes.json();
+            matrix = shortData.gamefield.field;
+            gameStatus = Number(shortData.state);
+
+            // 4. Отрисовываем матч-ап. Если у нас уже есть инфа из блока catch, передаем её, чтобы не делать повторный fullinfo
+            if (infoData) {
+                const p1Name = await getAnyPlayerName(infoData.fPlayerUuid);
+                const p2Name = await getAnyPlayerName(infoData.sPlayerUuid);
+                document.getElementById('matchup-info').innerHTML = `❌ <b>${p1Name}</b> &nbsp;vs&nbsp; ⭕ <b>${p2Name}</b>`;
+            } else {
+                // Если зашли через обычный join, то fullinfo дернем только один раз
+                await updatePairMatchupInfo();
+            }
+
+            // 5. Синхронизируем статус, доску и запускаем поллинг
+            parsePairStatus();
+            renderBoard();
+            
+            // Передаем true, чтобы поллинг не делал холостой первый запрос мгновенно
+            startPolling(true);
+
+        } catch (e) { 
+            alert(e.message); 
+            leaveGame(); 
+        }
+    }
+
+    // Немного доработаем startPolling, чтобы он не спамил в первую же миллисекунду
+    function startPolling(skipFirstRequest = false) {
+        stopPolling();
+        let lastKnownState = gameStatus;
+        
+        // Флаг skipFirstRequest предотвратит моментальный дублирующий shortinfo при входе
+        let isFirstRun = skipFirstRequest;
+
+        pollInterval = setInterval(async () => {
+            if (isFirstRun) {
+                isFirstRun = false;
+                return;
+            }
+            
+            try {
+                const res = await fetchWithAuth(`/api/game/${currentGameUUID}/shortinfo`, { method: 'GET' });
+                if(!res.ok) return;
+                const data = await res.json();
+                
+                matrix = data.gamefield.field;
+                const newState = Number(data.state);
+                
+                if(newState !== lastKnownState) {
+                    lastKnownState = newState;
+                    await updatePairMatchupInfo();
+                }
+
+                gameStatus = newState;
+                parsePairStatus();
+                renderBoard();
+
+                if(gameStatus > PairStatus.S_MOVE) {
+                    stopPolling(); 
+                    loadPlayerHistory();
+                    loadLeaderboard();
+                }
+            } catch(e) { console.error("Ошибка опроса shortinfo", e); }
+        }, 1000);
+    }
+
+    function stopPolling() {
+        if(pollInterval) {
+            clearInterval(pollInterval);
+            pollInterval = null;
+        }
+    }
+
+    function parsePairStatus() {
+        const el = document.getElementById('status');
+        if (gameStatus === PairStatus.WAIT) el.innerText = "⏳ Ожидание второго игрока...";
+        else if (gameStatus === PairStatus.F_MOVE) el.innerText = role === "first" ? "Твой ход! (X)" : "Ход соперника (X)...";
+        else if (gameStatus === PairStatus.S_MOVE) el.innerText = role === "second" ? "Твой ход! (O)" : "Ход соперника (O)...";
+        else if (gameStatus === PairStatus.DRAW) el.innerText = "🤝 Ничья в PvP матче!";
+        else if (gameStatus === PairStatus.F_WIN) el.innerText = role === "first" ? "🎉 Ура! Ты победил!" : "💀 Первый игрок победил.";
+        else if (gameStatus === PairStatus.S_WIN) el.innerText = role === "second" ? "🎉 Ура! Ты победил!" : "💀 Второй игрок победил.";
+    }
+
+    /* --- ОБЩИЙ ДВИЖОК ОТРИСОВКИ И ХОДОВ --- */
+    function renderBoard() {
+        const boardEl = document.getElementById('board');
+        boardEl.innerHTML = '';
+        
+        let isMyTurn = false;
+        if (gameType === "solo" && gameStatus === SoloStatus.PROGRESS) isMyTurn = true;
+        if (gameType === "pair" && gameStatus === PairStatus.F_MOVE && role === "first") isMyTurn = true;
+        if (gameType === "pair" && gameStatus === PairStatus.S_MOVE && role === "second") isMyTurn = true;
+
+        for (let r = 0; r < 3; r++) {
+            for (let c = 0; c < 3; c++) {
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+                
+                if (matrix[r][c] === 1) cell.innerText = 'X';
+                if (matrix[r][c] === 2) cell.innerText = 'O';
+                
+                if (!isMyTurn || matrix[r][c] !== 0) {
+                    cell.classList.add("disabled");
+                } else {
+                    cell.addEventListener('click', () => makeMove(r, c));
+                }
+                boardEl.appendChild(cell);
+            }
+        }
+    }
+
+    async function makeMove(row, col) {
+        matrix[row][col] = (gameType === "solo" || role === "first") ? 1 : 2;
+        renderBoard();
+
+        try {
+            const res = await fetchWithAuth(`/api/game/${currentGameUUID}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ field: matrix })
+            });
+            if(!res.ok) throw new Error("Ход не принят сервером");
+            const data = await res.json();
+            
+            matrix = data.gamefield.field;
+            gameStatus = Number(data.state);
+
+            if(gameType === "solo") {
+                parseSoloStatus();
+            } else {
+                parsePairStatus();
+            }
+            renderBoard();
+        } catch (e) { alert(e.message); }
+    }
+
+    function leaveGame() {
+        stopPolling();
+        document.getElementById('game-zone').classList.add('hidden');
+        document.getElementById('matchup-info').classList.add('hidden');
+        document.getElementById('lobby-zone').classList.remove('hidden');
+        refreshPairGames();
+        loadPlayerHistory();
+        loadLeaderboard();
+    }
+</script>
+</body>
+</html>
