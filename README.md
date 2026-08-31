@@ -26,3 +26,4 @@
 ```bash
 docker compose -f deploy/docker-compose.yaml up -d --build
 ```
+- Приложение будет доступно на `http://localhost:80`
